@@ -90,10 +90,10 @@ class Tile(MetaWidget):
         elif self.rarity == 'legendary':
             affix_id = -1
             while affix_id == -1:
-                random_affix_id = random.randint(0, len(LEGENDARY_AFFIXES) - 1)
+                random_affix_id = random.randint(0, len(LEGENDARY_AFFIXES[character.character_class]) - 1)
                 if random_affix_id not in Tile.legendary_affix_ids_revealed:
                     affix_id = random_affix_id
-            return affix_id, LEGENDARY_AFFIXES[affix_id]
+            return affix_id, LEGENDARY_AFFIXES[character.character_class][affix_id]
 
     def update_image(self):
         if self.rarity == 'magic':
@@ -476,13 +476,13 @@ def switch_class(chosen_class):
     for widget in tile_list + gate_list:
         widget.button.destroy()
     tile_list, gate_list = [], []
+    Tile.legendary_affix_ids_revealed = []
     if chosen_class == character.character_class:
         return
     else:
         old_class_gold = character.gold
         character = Character(inspected_board_id_list=[(0, 0)], character_class=chosen_class, gold=old_class_gold)
         # update character image
-        new_character_photo = None
         if character.character_class == 'Rogue':
             character_label.config(image=ROGUE_PHOTO)
         elif character.character_class == 'Druid':
