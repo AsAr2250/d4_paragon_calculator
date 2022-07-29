@@ -7,7 +7,7 @@ from data import *
 
 
 class Character:
-    def __init__(self, inspected_board_id_list, character_class='rogue', level=49, gold=5, has_gold_drop=False,
+    def __init__(self, inspected_board_id_list, character_class, level=49, gold=5, has_gold_drop=False,
                  glyphs=1, glyphs_max=1, leggy_count=0, current_respec_cost=RESPEC_COSTS[0]):
         self.inspected_board_id_list = inspected_board_id_list
         self.character_class = character_class
@@ -47,20 +47,20 @@ class Character:
 
 
 class MetaWidget:
-    def __init__(self, button, row, column, availability=0, board_id=(0, 0)):
+    def __init__(self, button, row, column, board_id=(0, 0), availability=0):
         self.button = button
         self.row = row
         self.column = column
-        self.availability = availability
         self.board_id = board_id
+        self.availability = availability
 
 
 class Tile(MetaWidget):
     """ Common and magic tiles are currently handled the same. We thus group common tiles under the 'magic' rarity. """
     legendary_affix_ids_revealed = []
 
-    def __init__(self, button, row, column, availability=0, rarity='magic', board_id=(0, 0), boosted=False):
-        super().__init__(button, row, column, availability, board_id)
+    def __init__(self, button, row, column, board_id=(0, 0), availability=0, rarity='magic', boosted=False):
+        super().__init__(button, row, column, board_id, availability)
         self.button.config(command=lambda: select_tile(self.row, self.column, self.board_id))
         self.rarity = rarity
         self.boosted = boosted
@@ -69,7 +69,7 @@ class Tile(MetaWidget):
         if self.rarity == 'magic':
             create_tooltip(self.button, f'{self.affix[2]}\n{self.affix[0]}{self.affix[1]}')
         elif self.rarity == 'center_tile':
-            create_tooltip(self.button, STAT_BENEFITS)
+            create_tooltip(self.button, STAT_BENEFITS[character.character_class])
         elif self.rarity == 'legendary':
             create_tooltip(self.button, f'Legendary\n{self.affix}')
         elif self.rarity == 'socket':
@@ -78,9 +78,12 @@ class Tile(MetaWidget):
     def roll_affix(self):
         if self.rarity == 'magic':
             affix_id = random.randint(0, len(MAGIC_TILE_AFFIXES) + 10)
-            # give dexterity a higher chance to appear
+            # give rogues more dexterity and druids more willpower
             if affix_id > len(MAGIC_TILE_AFFIXES) - 1:
-                affix_id = 3
+                if character.character_class == 'Rogue':
+                    affix_id = 3
+                elif character.character_class == 'Druid':
+                    affix_id = 2
             return affix_id, MAGIC_TILE_AFFIXES[affix_id]
         elif self.rarity == 'rare':
             pass
@@ -108,8 +111,8 @@ class Tile(MetaWidget):
 
 
 class Gate(MetaWidget):
-    def __init__(self, button, row, column, availability=0, board_id=(0, 0)):
-        super().__init__(button, row, column, availability, board_id)
+    def __init__(self, button, row, column, board_id=(0, 0), availability=0,):
+        super().__init__(button, row, column, board_id, availability)
         self.button.config(command=lambda: use_gate(self.row, self.column))
         create_tooltip(self.button, 'Move to adjacent board')
 
@@ -130,8 +133,8 @@ def init_board(old_board_id=(0, 0), new_board_id=(0, 0), additional_tile_count=9
     else:
         # define legendary tile
         legendary_tile_button = tk.Button(window, image=LEGGY_TILE_PHOTO, highlightthickness=0, bd=0)
-        new_tiles.append(Tile(button=legendary_tile_button, row=10, column=10, availability=0, rarity='legendary',
-                              board_id=new_board_id))
+        new_tiles.append(Tile(button=legendary_tile_button, row=10, column=10, board_id=new_board_id, availability=0,
+                              rarity='legendary'))
 
     # define gates
     for num, coords in enumerate([(0, 10), (10, 20), (20, 10), (10, 0)]):
@@ -163,7 +166,7 @@ def init_board(old_board_id=(0, 0), new_board_id=(0, 0), additional_tile_count=9
         col_num = random.randint(1, 19)
         is_free = True
         is_adjacent = False
-        if row_num == 10 and col_num == 10:
+        if row_num == 10 or col_num == 10:
             is_free = False
         for t in new_tiles:
             if (new_board_id, row_num, col_num) == (t.board_id, t.row, t.column):
@@ -430,7 +433,8 @@ def respec():
     # reset character
     old_cost_index = RESPEC_COSTS.index(character.current_respec_cost)
     updated_cost = RESPEC_COSTS[old_cost_index + 1]
-    character.__init__(inspected_board_id_list=character.inspected_board_id_list, level=49,
+    character.__init__(inspected_board_id_list=character.inspected_board_id_list,
+                       character_class=character.character_class, level=49,
                        gold=character.gold - character.current_respec_cost, has_gold_drop=character.has_gold_drop,
                        glyphs=character.glyphs_max, glyphs_max=character.glyphs_max,
                        current_respec_cost=updated_cost)
@@ -467,6 +471,31 @@ def buy_glyph():
             buy_glyph_button.config(bg='grey')
 
 
+def switch_class(chosen_class):
+    global character, tile_list, gate_list
+    for widget in tile_list + gate_list:
+        widget.button.destroy()
+    tile_list, gate_list = [], []
+    if chosen_class == character.character_class:
+        return
+    else:
+        old_class_gold = character.gold
+        character = Character(inspected_board_id_list=[(0, 0)], character_class=chosen_class, gold=old_class_gold)
+        # update character image
+        new_character_photo = None
+        if character.character_class == 'Rogue':
+            character_label.config(image=ROGUE_PHOTO)
+        elif character.character_class == 'Druid':
+            character_label.config(image=DRUID_PHOTO)
+        level_label.config(text='Level: 49')
+        gold_label.config(text=f'Gold: {old_class_gold}')
+        glyph_label.config(text=f'Glyphs: {character.glyphs}')
+        respec_button.config(text=f'Respec ({RESPEC_COSTS[0]}g)')
+        stat_summary_label.config(text=character.stat_sheet)
+        leggy_count_label.config(text='0')
+        tile_list, gate_list = init_board()
+
+
 if __name__ == '__main__':
     window.title('Paragon Board Calculator')
     window.geometry('1565x1200')
@@ -478,20 +507,18 @@ if __name__ == '__main__':
     bg_stone_label = tk.Label(window, image=bg_stone_photo)
     bg_stone_label.place(x=0, y=0)
 
-    # place rogue background
-    bg_rogue_photo = tk.PhotoImage(file='bg_rogue.png')
-    bg_rogue_label = tk.Label(window, image=bg_rogue_photo)
-    bg_rogue_label.place(x=1012, y=0)
+    # place druid character image
+    character_label = tk.Label(window, image=DRUID_PHOTO)
+    character_label.place(x=1012, y=0)
 
-    character = Character(inspected_board_id_list=[(0, 0)])
-
-    # create dropdown menu
-    OptionList = ['Rogue']
+    # create class dropdown menu and generate character
+    OptionList = ['Druid', 'Rogue']
     var_chosen_class = tk.StringVar(window)
     var_chosen_class.set(OptionList[0])
-    class_dropdown = tk.OptionMenu(window, var_chosen_class, *OptionList)
+    class_dropdown = tk.OptionMenu(window, var_chosen_class, *OptionList, command=switch_class)
     class_dropdown.config(width=10, font=('Algerian', 12))
     class_dropdown.grid(row=0, column=22)
+    character = Character(inspected_board_id_list=[(0, 0)], character_class=OptionList[0])
 
     # create character level label
     level_label = tk.Label(window, text='Level: 49', font=('Algerian', 11), bg='peru')
